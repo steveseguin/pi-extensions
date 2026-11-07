@@ -21,7 +21,7 @@ When pi runs _inside_ a linked worktree, the footer shows `worktree: <branch>` s
 
 1. Resolves current branch (refuses if detached HEAD).
 2. Picks the next `n` by scanning existing `<current>-wt-N` branches and incrementing the max — survives deleted worktrees.
-3. Runs `git worktree add -b <current>-wt-<n> .worktrees/<current>-wt-<n>` from the main worktree.
+3. Runs `git worktree add -b <current>-wt-<n> .worktrees/<current>-wt-<n> <current>` from the main worktree. The explicit starting branch preserves the active branch's commits even when invoked from a linked worktree.
 4. Idempotently appends `.worktrees/` to `.gitignore`.
 5. Forks the current session into the worktree's cwd via `SessionManager.forkFrom(sourcePath, worktreeCwd)`, then calls `ctx.switchSession(newPath)`. pi's runtime reads the new session header's `cwd` and `process.chdir()`s into the worktree, so the same pi session continues — same conversation, same TUI — but now operating inside the worktree. The original session stays on disk; resume with `pi --resume`.
 
@@ -72,3 +72,4 @@ Resolution uses `process.cwd()` since pi keeps it synced to the active session's
 ## Status indicator
 
 Subscribed to `session_start`. When `git rev-parse --git-common-dir` differs from `--git-dir`, the cwd is a linked worktree, and the indicator is set via `ctx.ui.setStatus("worktree", ...)`. Outside a linked worktree (e.g., after `switch` back to main), the handler explicitly clears the status — `setStatus` state is global to the UI and survives session switches, so we always set-or-clear rather than only setting.
+

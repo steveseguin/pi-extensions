@@ -299,6 +299,8 @@ export async function createWorktreeForkSession(
     "-b",
     newBranch,
     relPath,
+    // mainDir may have a different branch checked out than the active session.
+    branch,
   ]);
   if (result.code !== 0) {
     return {
@@ -594,3 +596,4 @@ async function switchOutOfWorktree(
     };
   }
 }
+
