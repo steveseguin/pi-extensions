@@ -40,7 +40,10 @@ import {
 } from "./operations.js";
 
 export default function (pi: ExtensionAPI) {
+  // Pi's active session cwd can change without changing process.cwd().
+  let sessionCwd: string | undefined;
   pi.on("session_start", async (_event, ctx: ExtensionContext) => {
+    sessionCwd = ctx.cwd;
     if (!ctx.hasUI) return;
     // Always set or clear: the UI status persists across session switches, so
     // when we /worktree merge back into main we need to wipe the prior wt label.
@@ -61,7 +64,7 @@ export default function (pi: ExtensionAPI) {
     description:
       "Create / merge / switch worktrees forked from current branch. Usage: /worktree [create|merge|switch [<name>]]",
     getArgumentCompletions: async (prefix) =>
-      getWorktreeCompletions(pi, prefix),
+      getWorktreeCompletions(pi, prefix, sessionCwd),
     handler: async (args, ctx) => {
       const tokens = args.trim().split(/\s+/).filter(Boolean);
       const sub = tokens[0] ?? "create";
@@ -85,6 +88,7 @@ export default function (pi: ExtensionAPI) {
 async function getWorktreeCompletions(
   pi: ExtensionAPI,
   prefix: string,
+  cwd: string | undefined,
 ): Promise<AutocompleteItem[]> {
   const parsed = parseCompletionPrefix(prefix);
 
@@ -94,8 +98,7 @@ async function getWorktreeCompletions(
   }
   if (parsed.sub !== "merge" && parsed.sub !== "switch") return [];
 
-  const cwd = process.cwd();
-  if (!(await isGitRepo(pi, cwd))) return [];
+  if (!cwd || !(await isGitRepo(pi, cwd))) return [];
   const mainDir = await mainWorktreeDir(pi, cwd);
   if (!mainDir) return [];
   const all = await listWorktrees(pi, mainDir);

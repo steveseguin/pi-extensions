@@ -21,9 +21,9 @@ When pi runs _inside_ a linked worktree, the footer shows `worktree: <branch>` s
 
 1. Resolves current branch (refuses if detached HEAD).
 2. Picks the next `n` by scanning existing `<current>-wt-N` branches and incrementing the max — survives deleted worktrees.
-3. Runs `git worktree add -b <current>-wt-<n> .worktrees/<current>-wt-<n>` from the main worktree.
+3. Runs `git worktree add -b <current>-wt-<n> .worktrees/<current>-wt-<n> <current>` from the main worktree. The explicit starting branch preserves the active branch's commits even when invoked from a linked worktree.
 4. Idempotently appends `.worktrees/` to `.gitignore`.
-5. Forks the current session into the worktree's cwd via `SessionManager.forkFrom(sourcePath, worktreeCwd)`, then calls `ctx.switchSession(newPath)`. pi's runtime reads the new session header's `cwd` and `process.chdir()`s into the worktree, so the same pi session continues — same conversation, same TUI — but now operating inside the worktree. The original session stays on disk; resume with `pi --resume`.
+5. Forks the current session into the worktree's cwd via `SessionManager.forkFrom(sourcePath, worktreeCwd)`, then calls `ctx.switchSession(newPath)`. Pi's runtime reads the new session header's `cwd` and updates its active session context, so the same pi session continues — same conversation, same TUI — but now operating inside the worktree. The original session stays on disk; resume with `pi --resume`.
 
 ### Merge
 
@@ -41,7 +41,7 @@ Steps (all git ops use `cwd: mainDir` so the main worktree drives the merge rega
 3. Saves main's current branch, checks out parent, runs `git merge --no-edit`.
 4. On conflict: aborts and restores. Worktree stays put so you can resolve manually.
 5. On success: `git worktree remove`, `git branch -d`, restores main's original branch.
-6. If pi was sitting inside the just-removed worktree: `ctx.switchSession(parentSessionPath)` (the session it forked from on create) so pi `process.chdir`s back into the main worktree seamlessly. If the parent session is gone, falls back to forking the current session into main's cwd. The footer's `worktree:` indicator clears on the next `session_start`.
+6. If pi was sitting inside the just-removed worktree: `ctx.switchSession(parentSessionPath)` (the session it forked from on create) so Pi resumes the parent session and its cwd. If the parent session is gone, falls back to forking the current session into main's cwd. The footer's `worktree:` indicator clears on the next `session_start`.
 
 ### Switch
 
@@ -58,7 +58,7 @@ Session resolution for the destination cwd:
 1. `SessionManager.list(targetCwd)` — if any session exists for that cwd, resume the most recent one. This means each worktree retains its own conversation thread across switches.
 2. Otherwise (first visit) fork the current session into target. The forked session's header records `parentSession`, so future switches can navigate back via the same mechanism.
 
-After resolving, calls `ctx.switchSession(destPath)`. Pi reads the destination's header `cwd` and `process.chdir`s, swapping pi's cwd in place.
+After resolving, calls `ctx.switchSession(destPath)`. Pi reads the destination's header `cwd` and updates its active session context. In Pi 1.3.0, default extension execution and built-in Bash use this cwd, while global `process.cwd()` stays at the launch directory.
 
 ## Autocomplete
 
@@ -67,8 +67,9 @@ After resolving, calls `ctx.switchSession(destPath)`. Pi reads the destination's
 - First token: `create | merge | switch` filtered by what's been typed.
 - Second token (after `merge` or `switch`): linked worktree branch names. `switch` additionally offers `main`. Each item shows the worktree's relative path as the description.
 
-Resolution uses `process.cwd()` since pi keeps it synced to the active session's cwd.
+Resolution uses the active session's cwd recorded on each `session_start`, including resume and session switches, rather than the process launch directory.
 
 ## Status indicator
 
 Subscribed to `session_start`. When `git rev-parse --git-common-dir` differs from `--git-dir`, the cwd is a linked worktree, and the indicator is set via `ctx.ui.setStatus("worktree", ...)`. Outside a linked worktree (e.g., after `switch` back to main), the handler explicitly clears the status — `setStatus` state is global to the UI and survives session switches, so we always set-or-clear rather than only setting.
+
