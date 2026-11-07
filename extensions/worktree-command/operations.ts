@@ -259,7 +259,7 @@ async function ensureGitignored(
 /**
  * Create a new worktree forked from the current branch under
  * `<mainDir>/.worktrees/<currentBranch>-wt-<n>`, fork the session into it,
- * and switch into the new session (process.chdir lands in the worktree).
+ * and switch into the new session with the worktree as its active cwd.
  *
  * Pi extensions can call this to set up a clean-room environment for an
  * agent task; the returned handle drives the matching mergeWorktreeAndCleanup
@@ -320,9 +320,9 @@ export async function createWorktreeForkSession(
   }
 
   // Fork the current in-memory session into the worktree's cwd. pi's
-  // switchSession() reads the new header's cwd and process.chdir()s to it, so
-  // the user lands in the worktree seamlessly with full conversation history
-  // preserved.
+  // switchSession() reads the new header's cwd into the active session context,
+  // so the user lands in the worktree with full conversation history preserved.
+  // Pi 1.3.0 does not change the process-global cwd.
   const sourceSessionFile = ctx.sessionManager.getSessionFile();
   if (!sourceSessionFile) {
     warnings.push("created but no source session file to fork from");
