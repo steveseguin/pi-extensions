@@ -35,6 +35,12 @@ interface ActivePipeline {
 }
 
 export default function (pi: ExtensionAPI) {
+  // Pi session switches do not change the process launch directory.
+  let sessionCwd: string | undefined;
+  pi.on("session_start", async (_event, ctx) => {
+    sessionCwd = ctx.cwd;
+  });
+
   let activePipeline: ActivePipeline | null = null;
   let pipelineOverride: PipelineOverrideState | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,7 +102,7 @@ export default function (pi: ExtensionAPI) {
     description:
       "Execute or validate a JSON pipeline. Usage: /pipeline execute|validate <path>",
     getArgumentCompletions: async (prefix) =>
-      getPipelineCompletions(pi, prefix),
+      getPipelineCompletions(pi, prefix, sessionCwd),
     handler: async (args, ctx) => {
       const tokens = args.trim().split(/\s+/).filter(Boolean);
       const sub = tokens[0] ?? "";
@@ -169,7 +175,7 @@ async function runPipelineExecute(
 
   let loaded;
   try {
-    loaded = await loadPipeline(pathArg);
+    loaded = await loadPipeline(path.resolve(ctx.cwd, pathArg));
   } catch (e) {
     if (e instanceof PipelineLoadError) {
       ctx.ui.notify(`Pipeline: ${e.message}`, "error");
@@ -232,7 +238,7 @@ async function runPipelineValidate(
   }
 
   try {
-    const loaded = await loadPipeline(pathArg);
+    const loaded = await loadPipeline(path.resolve(ctx.cwd, pathArg));
     ctx.ui.notify(
       `Pipeline: ${loaded.filePath} OK (${loaded.pipeline.units.length} units, ${(loaded.pipeline.flow ?? []).length} edges)`,
       "info",
@@ -252,6 +258,7 @@ async function runPipelineValidate(
 async function getPipelineCompletions(
   pi: ExtensionAPI,
   prefix: string,
+  cwd: string | undefined,
 ): Promise<AutocompleteItem[]> {
   const parsed = parseCompletionPrefix(prefix);
 
@@ -260,7 +267,7 @@ async function getPipelineCompletions(
   }
   if (parsed.sub !== "execute" && parsed.sub !== "validate") return [];
 
-  const cwd = process.cwd();
+  if (!cwd) return [];
   const r = await pi.exec(
     "find",
     [
