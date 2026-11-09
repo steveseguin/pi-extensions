@@ -179,6 +179,7 @@ async function runChecker(
     let finalText = "";
     let streamedText = false;
     let failure: Error | undefined;
+    let assistantFailure: Error | undefined;
     let timedOut = false;
     let escalation: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
@@ -254,8 +255,19 @@ async function runChecker(
               text,
             });
         } else if (event.type === "message_end") {
-          const text = assistantText(event.message);
+          let text: string | undefined;
+          try {
+            text = assistantText(event.message);
+          } catch (error) {
+            // Pi can recover an assistant error through retry or compaction.
+            // Keep it separate from cancellation and other terminal failures.
+            assistantFailure =
+              error instanceof Error ? error : new Error(String(error));
+            finalText = "";
+            return;
+          }
           if (text !== undefined) {
+            assistantFailure = undefined;
             finalText = text;
             if (text && !streamedText)
               config.onUpdate?.({ phase, type: "text", text });
@@ -291,8 +303,9 @@ async function runChecker(
       if (buffer.trim()) processLine(buffer);
 
       const diagnostic = stderr ? `\nChecker stderr:\n${stderr}` : "";
-      if (failure) {
-        reject(new Error(`${failure.message}${diagnostic}`));
+      const finalFailure = failure ?? assistantFailure;
+      if (finalFailure) {
+        reject(new Error(`${finalFailure.message}${diagnostic}`));
         return;
       }
       if (timedOut) {
